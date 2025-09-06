@@ -1,0 +1,36 @@
+name: RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rdp:
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Enable RDP + User
+        run: |
+          # Enable RDP
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+          # Create user with simple valid password
+          $password = "RdpPassw0rd!"
+          $sec = ConvertTo-SecureString $password -AsPlainText -Force
+          if (-not (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue)) {
+            New-LocalUser "RDP" -Password $sec -AccountNeverExpires
+          } else {
+            Set-LocalUser -Name "RDP" -Password $sec
+          }
+          Add-LocalGroupMember "Administrators" "RDP"
+          Add-LocalGroupMember "Remote Desktop Users" "RDP"
+
+          Write-Host "=== RDP ACCESS ==="
+          Write-Host "IP: $env:COMPUTERNAME"
+          Write-Host "User: RDP"
+          Write-Host "Pass: $password"
+
+      - name: Keep alive
+        run: |
+          while ($true) { Write-Host "[$(Get-Date)] RDP Active"; Start-Sleep 300 }
