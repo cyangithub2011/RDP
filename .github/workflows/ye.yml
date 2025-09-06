@@ -1,0 +1,51 @@
+name: Windows RDP Setup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Enable RDP & Create User
+        run: |
+          Write-Host "Enabling RDP..."
+          Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+          Write-Host "Creating local user..."
+          $Password = ConvertTo-SecureString "Rdp@12345" -AsPlainText -Force
+          New-LocalUser "RDP" -Password $Password -AccountNeverExpires -PasswordNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "RDP"
+
+      - name: Install Dependencies (DirectX, Roblox, LDPlayer)
+        run: |
+          Write-Host "Installing dependencies..."
+
+          # DirectX End-User Runtimes (June 2010)
+          $dxUrl = "https://download.microsoft.com/download/1/8/C/18CFCF9F-93B8-4B0E-AE3A-EA71A68560D4/directx_Jun2010_redist.exe"
+          $dxPath = "$env:TEMP\directx_redist.exe"
+          Invoke-WebRequest -Uri $dxUrl -OutFile $dxPath
+          Start-Process -FilePath $dxPath -ArgumentList "/Q" -Wait
+          Remove-Item $dxPath -Force
+
+          # Roblox Player
+          $rbxUrl = "https://setup.rbxcdn.com/RobloxPlayerLauncher.exe"
+          $rbxPath = "$env:TEMP\RobloxPlayerLauncher.exe"
+          Invoke-WebRequest -Uri $rbxUrl -OutFile $rbxPath
+          Start-Process -FilePath $rbxPath -ArgumentList "-install" -Wait
+          Remove-Item $rbxPath -Force
+
+          # LDPlayer (Android emulator)
+          $ldUrl = "https://cdn.ldmnq.com/download/en/LDPlayer9_en_9.0.53.exe"
+          $ldPath = "$env:TEMP\LDPlayer.exe"
+          Invoke-WebRequest -Uri $ldUrl -OutFile $ldPath
+          Start-Process -FilePath $ldPath -ArgumentList "/silent" -Wait
+          Remove-Item $ldPath -Force
+
+          Write-Host "All apps installed!"
+
+      - name: Keep Alive
+        run: |
+          Write-Host "RDP session ready. Keeping job alive..."
+          while ($true) { Start-Sleep -Seconds 180 }
