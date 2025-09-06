@@ -12,41 +12,26 @@ jobs:
       - name: Configure Core RDP Settings
         run: |
           # Enable Remote Desktop and disable Network Level Authentication (if needed)
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
-                             -Name "fDenyTSConnections" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                             -Name "UserAuthentication" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                             -Name "SecurityLayer" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
 
-          # Remove any existing rule with the same name to avoid duplication
+          # Allow RDP on firewall
           netsh advfirewall firewall delete rule name="RDP-Tailscale"
-
-          # Allow RDP (3389) through firewall
-          netsh advfirewall firewall add rule name="RDP-Tailscale" `
-            dir=in action=allow protocol=TCP localport=3389
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
 
           # Restart RDP service
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User with Secure Password
+      - name: Create RDP User
         run: |
-          Add-Type -AssemblyName System.Security
-          $charSet = @{
-              Upper   = [char[]](65..90)      # A-Z
-              Lower   = [char[]](97..122)     # a-z
-              Number  = [char[]](48..57)      # 0-9
-              Special = ([char[]](33..47) + [char[]](58..64) +
-                         [char[]](91..96) + [char[]](123..126))
-          }
-          $rawPassword = @()
-          $rawPassword += $charSet.Upper | Get-Random -Count 3
-          $rawPassword += $charSet.Lower | Get-Random -Count 3
-          $rawPassword += $charSet.Number | Get-Random -Count 2
-          $rawPassword += $charSet.Special | Get-Random -Count 2
-          $password = -join ($rawPassword | Sort-Object { Get-Random })
+          $password = "P@ssw0rd123!"
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-          New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
+          if (-not (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue)) {
+              New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
+          } else {
+              Set-LocalUser -Name "RDP" -Password $securePass
+          }
           Add-LocalGroupMember -Group "Administrators" -Member "RDP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
 
@@ -54,7 +39,7 @@ jobs:
 
       - name: Install Tailscale
         run: |
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
           $installerPath = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
@@ -80,9 +65,9 @@ jobs:
         run: |
           Write-Host "Installing dependencies..."
 
-          # DirectX runtime
-          $dxUrl = "https://download.microsoft.com/download/1/4/1/141FDE2A-9723-4E8A-AED1-87E7E4C5AF1E/directx_Jun2010_redist.exe"
-          $dxPath = "$env:TEMP\directx.exe"
+          # DirectX End-User Runtime Web Installer
+          $dxUrl = "https://download.microsoft.com/download/9/3/1/931C2B79-B16A-45B9-9D7A-0F8E4F1A8F6F/dxwebsetup.exe"
+          $dxPath = "$env:TEMP\dxwebsetup.exe"
           Invoke-WebRequest -Uri $dxUrl -OutFile $dxPath
           Start-Process -FilePath $dxPath -ArgumentList "/Q" -Wait
           Remove-Item $dxPath -Force
@@ -118,7 +103,7 @@ jobs:
           Write-Host "`n=== RDP ACCESS ==="
           Write-Host "Address: $env:TAILSCALE_IP"
           Write-Host "Username: RDP"
-          Write-Host "Password: $(echo $env:RDP_CREDS)"
+          Write-Host "Password: P@ssw0rd123!"
           Write-Host "==================`n"
           while ($true) {
               Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
