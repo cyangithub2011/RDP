@@ -1,0 +1,45 @@
+name: Ubuntu-RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ubuntu-rdp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Install Desktop + RDP
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xfce4 xfce4-goodies xrdp
+          sudo systemctl enable xrdp
+          sudo systemctl start xrdp
+
+      - name: Create RDP User
+        run: |
+          USER=rdpuser
+          PASS=$(openssl rand -base64 12)
+          sudo useradd -m -s /bin/bash $USER
+          echo "$USER:$PASS" | sudo chpasswd
+          sudo usermod -aG sudo $USER
+          echo "RDP_USER=$USER" >> $GITHUB_ENV
+          echo "RDP_PASS=$PASS" >> $GITHUB_ENV
+
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-ubuntu-${{ github.run_id }}
+          echo "TS_IP=$(tailscale ip -4)" >> $GITHUB_ENV
+
+      - name: Show Connection Info
+        run: |
+          echo "=== Ubuntu RDP Remote ==="
+          echo "Tailscale IP: $TS_IP"
+          echo "Username: $RDP_USER"
+          echo "Password: $RDP_PASS"
+          echo "========================="
+          while true; do
+            echo "[$(date)] Ubuntu RDP running..."
+            sleep 300
+          done
